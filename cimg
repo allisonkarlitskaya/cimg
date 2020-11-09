@@ -181,6 +181,9 @@ def main():
 
     args = parser.parse_args()
 
+    if ('func' not in args or args.func != cmd_init) and not os.path.exists(gitdir):
+        sys.exit(f"{gitdir} doesn't exist.  Try `cimg init` first.")
+
     if 'func' not in args:
         args.func = cmd_status
         args.image = ImagesList([])
