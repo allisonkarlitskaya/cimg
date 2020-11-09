@@ -1,7 +1,6 @@
 #!/usr/bin/python3 -B
 
 import ANSI
-import argcomplete
 import argparse
 import fnmatch
 import os.path
@@ -9,35 +8,20 @@ import platform
 import subprocess
 import sys
 
-cimg_directory = os.path.dirname(os.path.realpath(sys.argv[0]))
-workdir = os.path.join(cimg_directory, "bots")
-imagedir = os.path.join(workdir, 'images')
+import image_download
+
+cachedir = os.getenv('XDG_CACHE_HOME') or os.path.expanduser('~/.cache')
+cockpit_cache = os.path.join(cachedir, 'cockpit-images')
+cimg_cache = os.path.join(cachedir, 'cimg')
+gitdir = os.path.join(cimg_cache, 'bots.git')
 
 try:
     import argcomplete
 except ImportError:
-    argcomplete = lambda: None
+    argcomplete = None
 
-def ps1(cwd):
-    login = os.getlogin()
-    hostname = platform.node()
-    home = os.path.expanduser('~')
-
-    if cwd.startswith(home):
-        cwd = '~' + cwd[len(home):]
-
-    return '{}@{}:{}$'.format(login, hostname, cwd)
-
-def subprocess_call(*args, cwd=workdir):
-    print(ps1(cwd), ' '.join(args))
-
-    try:
-        subprocess.check_call(args, cwd=cwd, encoding='UTF-8')
-    except subprocess.CalledProcessError as e:
-        sys.exit(1)
-
-def subprocess_output(*args, cwd=workdir):
-    return subprocess.check_output(args, cwd=cwd, encoding='UTF-8')
+def cat_file(obj):
+    return subprocess.check_output(['git', '--git-dir', gitdir, 'cat-file', '-p', obj], encoding='utf-8')
 
 cimg_commands = {}
 def cimg_command(description):
@@ -48,29 +32,35 @@ def cimg_command(description):
         return func
     return register
 
+class Image:
+    def __init__(self, name, filename, fingerprint, exists):
+        self.name = name
+        self.filename = filename
+        self.fingerprint = fingerprint
+        self.exists = exists
+
 class ImageDirectory:
-    def __init__(self, directory=imagedir):
-        self.directory = directory
+    def __init__(self):
         self.images = None
 
     def get_images(self):
         if self.images is None:
             self.images = {}
 
-            for name in os.listdir(imagedir):
-                if not name.endswith('.qcow2'):
-                    try:
-                        fullname = os.path.join(imagedir, name)
-                        dest = os.readlink(os.path.join(imagedir, name))
+            files = set()
 
-                        if dest.startswith(name + '-') and dest.endswith('.qcow2'):
-                            fingerprint = dest[len(name) + 1:-6]
-                            assert len(fingerprint) == 64
-                            exists = os.path.exists(fullname)
-                            self.images[name] = Image(name, fingerprint, exists)
+            for line in cat_file('HEAD:images').splitlines():
+                objinfo, name = line.split('\t')
+                objmode, objtype, objhash = objinfo.split(' ')
 
-                    except OSError:
-                        continue
+                if objtype == 'blob' and objmode == '120000':
+                    dest = cat_file(objhash)
+                    if dest.startswith(name + '-') and dest.endswith('.qcow2'):
+                        fingerprint = dest[len(name) + 1:-6]
+                        assert len(fingerprint) == 64
+                        filename = os.path.join(cockpit_cache, dest)
+                        exists = os.path.exists(filename)
+                        self.images[name] = Image(name, filename, fingerprint, exists)
 
         return self.images
 
@@ -79,17 +69,9 @@ class ImageDirectory:
 
         return {name:images[name] for name in fnmatch.filter(images, pattern)}
 
-class Image:
-    all_images = None
-
-    def __init__(self, name, fingerprint, exists):
-        self.name = name
-        self.fingerprint = fingerprint
-        self.exists = exists
-
 class ImagesList:
-    def __init__(self, patterns, imagedir):
-        imgdict = ImageDirectory(imagedir).get_images()
+    def __init__(self, patterns):
+        imgdict = ImageDirectory().get_images()
         imglist = []
 
         if patterns:
@@ -127,7 +109,7 @@ class ImagesList:
 
 class ImagesAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
-        imglist = ImagesList(values, imagedir)
+        imglist = ImagesList(values)
         setattr(namespace, self.dest, imglist)
 
     def completion(self, prefix, parsed_args):
@@ -154,7 +136,7 @@ def cmd_status(args, parser):
 
     for image in args.image.values():
         color = image.exists and ANSI.cyan or ANSI.red
-        print(('  {}{:20}' + ANSI.dark + '{}' + ANSI.reset).format(color, image.name, image.fingerprint))
+        print(('  {}{}' + ANSI.dark + '-{}.qcow2' + ANSI.reset).format(color, image.name, image.fingerprint))
 
 
 @cimg_command('Download one or more images')
@@ -165,30 +147,26 @@ def cmd_download(args, parser):
 
     for image in args.image.values():
         if not image.exists:
-            subprocess_call('./image-download', image.name)
+            image_download.get_image(image.filename)
 
 @cimg_command('Update bots repository')
 def cmd_update(args, parser):
     if parser and not args:
         return
 
-    current_branch = subprocess_output('git', 'symbolic-ref', '--short', 'HEAD').strip()
-    if current_branch != 'master':
-        raise Exception('Git checkout in {} is not on master'.format(workdir))
-    subprocess_call('git', 'pull', '--ff-only')
+    subprocess.check_call(['git', '--git-dir', gitdir, 'fetch'])
 
 @cimg_command('Initialise cimg (ie: clone the bots repository)')
 def cmd_init(args, parser):
     if parser and not args:
         return
 
-    repository = 'https://github.com/cockpit-project/bots'
-    subprocess_call('git', 'clone', repository, cwd=cimg_directory)
+    repository = 'https://github.com/cockpit-project/bots.git'
+    subprocess.check_call(['git', 'clone', '--bare', '--depth=1', repository, gitdir])
 
 def main():
     parser = argparse.ArgumentParser(description='Manage cockpit bots images',
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--imagedir', help='set images directory', action='store', default=imagedir)
 
     subparsers = parser.add_subparsers()
     for name in cimg_commands:
@@ -198,12 +176,14 @@ def main():
         subparser.set_defaults(func=func)
         func(None, subparser)
 
-    argcomplete.autocomplete(parser, default_completer=images_completer)
+    if argcomplete:
+        argcomplete.autocomplete(parser, default_completer=images_completer)
+
     args = parser.parse_args()
 
     if 'func' not in args:
         args.func = cmd_status
-        args.image = ImagesList([], imagedir)
+        args.image = ImagesList([])
         args.long = False
         args.short = True
 
