@@ -27,6 +27,9 @@ So far, only the following commands are supported:
  * `status`: show the status of images
  * `download`: download images
 
+The images are downloaded to `~/.cache/cockpit-images/`, which matches the
+cockpit default.
+
 ### Examples
 
 Show the summary status of all images:
