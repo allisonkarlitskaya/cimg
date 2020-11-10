@@ -154,7 +154,8 @@ def cmd_update(args, parser):
     if parser and not args:
         return
 
-    subprocess.check_call(['git', '--git-dir', gitdir, 'fetch'])
+    head = subprocess.check_output(['git', '--git-dir', gitdir, 'branch', '--show-current'], encoding='utf-8').strip()
+    subprocess.check_call(['git', '--git-dir', gitdir, 'fetch', '-v', 'origin', f'HEAD:{head}'])
 
 @cimg_command('Initialise cimg (ie: clone the bots repository)')
 def cmd_init(args, parser):
