@@ -61,7 +61,11 @@ def worker(prefix, suffix, status_queue, work_queue):
             return
 
         # Now, process blocks from the work queue
-        while block := work_queue.get():
+        while True:
+            block = work_queue.get()
+            if not block:
+                break
+
             try:
                 filename, (start, end) = block
 
