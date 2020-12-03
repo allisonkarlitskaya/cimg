@@ -284,6 +284,51 @@ def format_speed(n, elapsed):
 
     return format_size(n / elapsed, unit='B/s')
 
+
+def create_progressbar(portion_bytes, palette, n_blocks):
+    # since the number of bytes doesn't always divide evenly by the number of
+    # blocks, each block has a different numbers of bytes in it
+    cumulative = 0
+    total_bytes = sum(portion_bytes)
+
+    result = ''
+
+    for n in range(n_blocks):
+        start_of_this_block = (total_bytes * n) // n_blocks
+        end_of_this_block = (total_bytes * (n + 1)) // n_blocks
+        size_of_this_block = end_of_this_block - start_of_this_block
+        assert cumulative == start_of_this_block
+
+        block_portions = []
+        while cumulative < end_of_this_block:
+            while not portion_bytes[0]:
+                portion_bytes.pop(0)
+                palette.pop(0)
+
+            portion_size = min(end_of_this_block - cumulative, portion_bytes[0])
+            portion_color = palette[0]
+            block_portions.append((portion_color, portion_size))
+
+            portion_bytes[0] -= portion_size
+            cumulative += portion_size
+
+        if len(block_portions) == 1:
+            result += '\033[38;5;' + block_portions[0][0] + 'm\u2588'
+
+        elif len(block_portions) == 2:
+            character = 0x2590 - (block_portions[0][1] * 8) // size_of_this_block
+            if character == 0x2590:
+                character = 32
+
+            result += '\033[38;5;' + block_portions[0][0] + 'm' + '\033[48;5;' + block_portions[1][0] + 'm' + chr(character)
+
+        else:
+            result += '\033[0mX'
+
+    result += '\033[0m'
+
+    return result
+
 class FancyUI(UI):
     def start(self):
         self.prefixlen = max(len(prefix) for prefix in self.prefixes)
@@ -337,7 +382,10 @@ class FancyUI(UI):
         width = 120
 
         if cursor_up:
-            sys.stdout.write('\x1b[{}A\x1b[?7l\n'.format(len(self.prefixes) + 2))
+            sys.stdout.write('\x1b[{}A\x1b[?7l\n'.format(len(self.prefixes) + 4))
+
+        # always start with an empty line
+        sys.stdout.write('\n')
 
         heading_template = '\x1b[K\x1b[{color}m{self.filename}\x1b[m{progress:>17} {speed}\n'
         prefix_template = '  \x1b[K\x1b[{color}m{prefix:<{self.prefixlen}}\x1b[m {progress:>10} \x1b[{status_color}m{status}\x1b[m\n'\
@@ -359,6 +407,18 @@ class FancyUI(UI):
             speed = ''
 
         sys.stdout.write(heading_template.format(**vars()))
+
+
+        if self.size:
+            progresses = [self.progress[prefix] for prefix in self.prefixes]
+            progresses.insert(0, self.total - sum(progresses))
+            progresses.append(self.size - sum(progresses))
+            progressbar = create_progressbar(progresses, ['15', '9', '10', '11', '12', '0'], 80)
+            sys.stdout.write('[' + progressbar + '] ' + str((self.total * 100)//self.size)+'%\n')
+        else:
+            sys.stdout.write('[' + ' ' * 80 + ']\n')
+
+
         for prefix in self.prefixes:
             if self.progress[prefix]:
                 progress = format_size(self.progress[prefix])
