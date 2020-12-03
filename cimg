@@ -10,6 +10,7 @@ import sys
 
 import image_download
 
+bots_repository = 'https://github.com/cockpit-project/bots.git'
 cachedir = os.getenv('XDG_CACHE_HOME') or os.path.expanduser('~/.cache')
 cockpit_cache = os.path.join(cachedir, 'cockpit-images')
 cimg_cache = os.path.join(cachedir, 'cimg')
@@ -49,7 +50,7 @@ class ImageDirectory:
 
             files = set()
 
-            for line in cat_file('HEAD:images').splitlines():
+            for line in cat_file('FETCH_HEAD:images').splitlines():
                 objinfo, name = line.split('\t')
                 objmode, objtype, objhash = objinfo.split(' ')
 
@@ -152,18 +153,31 @@ def cmd_download(args, parser):
 @cimg_command('Update bots repository')
 def cmd_update(args, parser):
     if parser and not args:
+        parser.add_argument('--pr', type=int, help='fetch the specified bots PR')
+        parser.add_argument('fetch_args', nargs='*', metavar='ARGS',
+                            help='remote (and optional branch) to fetch')
         return
 
-    head = subprocess.check_output(['git', '--git-dir', gitdir, 'branch', '--show-current'], encoding='utf-8').strip()
-    subprocess.check_call(['git', '--git-dir', gitdir, 'fetch', '-v', 'origin', f'HEAD:{head}'])
+    if args.pr and args.fetch_args:
+        sys.exit('cannot specify --pr and other args')
+
+    if args.pr:
+        fetch_args = [bots_repository, f'pull/{args.pr}/head']
+    else:
+        fetch_args = args.fetch_args or [bots_repository]
+
+    subprocess.check_call(['git', '--git-dir', gitdir, 'fetch', '--depth=1'] + fetch_args)
+    with open(os.path.join(gitdir, 'FETCH_HEAD')) as fetch_head:
+        print(fetch_head.read().strip().replace('\t', ' '))
 
 @cimg_command('Initialise cimg (ie: clone the bots repository)')
 def cmd_init(args, parser):
     if parser and not args:
         return
 
-    repository = 'https://github.com/cockpit-project/bots.git'
-    subprocess.check_call(['git', 'clone', '--bare', '--depth=1', repository, gitdir])
+    os.makedirs(cimg_cache, exists_okay=True)
+    subprocess.check_call(['git', '--git-dir', gitdir, 'init'])
+    cmd_update(None, None)
 
 def main():
     parser = argparse.ArgumentParser(description='Manage cockpit bots images',
