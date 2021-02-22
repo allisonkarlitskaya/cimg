@@ -471,7 +471,6 @@ def create_ui(filename, prefixes):
 def get_image(destination):
     prefixes = [
         'https://images-frontdoor.apps.ocp.ci.centos.org/',
-        'https://images-cockpit.apps.ci.centos.org/',
         'https://cockpit-11.e2e.bos.redhat.com:8493/',
         'https://10.29.163.169:8493/'
     ]
