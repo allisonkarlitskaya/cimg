@@ -2,6 +2,7 @@
 
 import ANSI
 import argparse
+import http.server
 import fnmatch
 import os.path
 import platform
@@ -178,6 +179,18 @@ def cmd_init(args, parser):
     os.makedirs(cimg_cache, exist_ok=True)
     subprocess.check_call(['git', '--git-dir', gitdir, 'init'])
     cmd_update(None, None)
+
+@cimg_command("Serve cockpit images via python's http.server")
+def cmd_server(args, parser):
+    if parser and not args:
+        return
+
+    os.makedirs(cockpit_cache, exist_ok=True)
+    os.chdir(cockpit_cache)
+
+    listen = ('', 8493)
+    server = http.server.HTTPServer(listen, http.server.SimpleHTTPRequestHandler)
+    server.serve_forever()
 
 def main():
     parser = argparse.ArgumentParser(description='Manage cockpit bots images',
