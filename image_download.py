@@ -124,7 +124,11 @@ def gather_blocks(destination, blocks):
             src_size = os.fstat(src.fileno()).st_size
 
             assert src_size == end - start
-            os.copy_file_range(src.fileno(), result.fileno(), src_size, 0, start)
+            try:
+                os.copy_file_range(src.fileno(), result.fileno(), src_size, 0, start)
+            except (OSError, AttributeError):
+                # copy_file_range() can be missing at the library or kernel level
+                result.write(src.read(src_size))
             src.close()
 
 def download(destination, prefixes, suffix, ui):
