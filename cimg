@@ -175,7 +175,7 @@ def cmd_init(args, parser):
     if parser and not args:
         return
 
-    os.makedirs(cimg_cache, exists_okay=True)
+    os.makedirs(cimg_cache, exist_ok=True)
     subprocess.check_call(['git', '--git-dir', gitdir, 'init'])
     cmd_update(None, None)
 
