@@ -156,18 +156,13 @@ def cmd_update(args, parser):
     else:
         fetch_args = args.fetch_args or [bots_repository]
 
+    if not os.path.exists(gitdir):
+        os.makedirs(cimg_cache, exist_ok=True)
+        subprocess.check_call(['git', '--git-dir', gitdir, 'init'])
+
     subprocess.check_call(['git', '--git-dir', gitdir, 'fetch', '--depth=1'] + fetch_args)
     with open(os.path.join(gitdir, 'FETCH_HEAD')) as fetch_head:
         print(fetch_head.read().strip().replace('\t', ' '))
-
-@cimg_command('Initialise cimg (ie: clone the bots repository)')
-def cmd_init(args, parser):
-    if parser and not args:
-        return
-
-    os.makedirs(cimg_cache, exist_ok=True)
-    subprocess.check_call(['git', '--git-dir', gitdir, 'init'])
-    cmd_update(None, None)
 
 @cimg_command("Serve cockpit images via python's http.server")
 def cmd_server(args, parser):
@@ -240,8 +235,8 @@ def main():
 
     args = parser.parse_args()
 
-    if ('func' not in args or args.func != cmd_init) and not os.path.exists(gitdir):
-        sys.exit(f"{gitdir} doesn't exist.  Try `cimg init` first.")
+    if ('func' not in args or args.func != cmd_update) and not os.path.exists(gitdir):
+        sys.exit(f"{gitdir} doesn't exist.  Try `cimg update` first.")
 
     if 'func' not in args:
         args.func = cmd_status
