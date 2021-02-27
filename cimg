@@ -35,45 +35,34 @@ def cimg_command(description):
     return register
 
 class Image:
-    def __init__(self, name, filename, fingerprint, exists):
+    def __init__(self, name, dest):
         self.name = name
-        self.filename = filename
-        self.fingerprint = fingerprint
-        self.exists = exists
+        self.fingerprint = dest[len(name) + 1:-6]
+        assert len(self.fingerprint) == 64
+        self.filename = os.path.join(cockpit_cache, dest)
+        self.exists = os.path.exists(self.filename)
 
-class ImageDirectory:
-    def __init__(self):
-        self.images = None
+def scan_git():
+    images = {}
 
-    def get_images(self):
-        if self.images is None:
-            self.images = {}
+    for line in cat_file('FETCH_HEAD:images').splitlines():
+        objinfo, name = line.split('\t')
+        objmode, objtype, objhash = objinfo.split(' ')
 
-            files = set()
+        if objtype == 'blob' and objmode == '120000':
+            dest = cat_file(objhash)
+            if dest.startswith(name + '-') and dest.endswith('.qcow2'):
+                images[name] = dest
 
-            for line in cat_file('FETCH_HEAD:images').splitlines():
-                objinfo, name = line.split('\t')
-                objmode, objtype, objhash = objinfo.split(' ')
+    return images
 
-                if objtype == 'blob' and objmode == '120000':
-                    dest = cat_file(objhash)
-                    if dest.startswith(name + '-') and dest.endswith('.qcow2'):
-                        fingerprint = dest[len(name) + 1:-6]
-                        assert len(fingerprint) == 64
-                        filename = os.path.join(cockpit_cache, dest)
-                        exists = os.path.exists(filename)
-                        self.images[name] = Image(name, filename, fingerprint, exists)
-
-        return self.images
-
-    def glob(self, pattern):
-        images = self.get_images()
-
-        return {name:images[name] for name in fnmatch.filter(images, pattern)}
+def get_image_dict():
+    images = scan_git()
+    return {name: Image(name, images[name]) for name in images}
 
 class ImagesList:
     def __init__(self, patterns):
-        imgdict = ImageDirectory().get_images()
+        imgdict = get_image_dict()
         imglist = []
 
         if patterns:
@@ -191,6 +180,48 @@ def cmd_server(args, parser):
     listen = ('', 8493)
     server = http.server.HTTPServer(listen, http.server.SimpleHTTPRequestHandler)
     server.serve_forever()
+
+@cimg_command("Display disk usage statistics")
+def cmd_df(args, parser):
+    if parser and not args:
+        return
+
+    current_files = set(scan_git().values())
+    os.makedirs(cockpit_cache, exist_ok=True)
+
+    descs = ('Current', 'Other')
+    sizes = [[0, 0], [0, 0]]
+
+    for entry in os.scandir(cockpit_cache):
+        if entry.is_file(follow_symlinks=False):
+            size = os.stat(entry.path).st_size
+            sizes[entry.name not in current_files][0] += size
+
+        elif entry.is_dir(follow_symlinks=False):
+            size = sum(os.stat(e.path).st_size for e in os.scandir(entry.path))
+            sizes[entry.name[:-8] not in current_files][1] += size
+
+    buf = os.statvfs(cockpit_cache)
+    available = buf.f_bavail * buf.f_bsize
+
+    for desc, size in zip(descs, sizes):
+        print (sum(size), desc, 'images')
+
+    print(available, 'available')
+
+@cimg_command("Delete all non-current images")
+def cmd_prune(args, parser):
+    if parser and not args:
+        return
+
+    current_files = set(scan_git().values())
+    os.makedirs(cockpit_cache, exist_ok=True)
+
+    for entry in os.scandir(cockpit_cache):
+        if entry.is_file(follow_symlinks=False):
+            if entry.name not in current_files:
+                os.unlink(entry.path)
+
 
 def main():
     parser = argparse.ArgumentParser(description='Manage cockpit bots images',
