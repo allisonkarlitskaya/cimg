@@ -1,0 +1,24 @@
+#!/bin/sh -eux
+
+podman container rm -f cimg || true
+
+podman build -t cimg -f - <<EOF
+
+FROM    debian:testing
+
+RUN     apt-get update && \
+        DEBIAN_FRONTEND=noninteractive apt-get install -y python3-urllib3 git && \
+        rm -rf /var/lib/apt/lists/* && \
+        useradd -m cimg && \
+        su -l -c 'git clone https://github.com/allisonkarlitskaya/cimg' cimg
+
+USER    cimg
+
+CMD     /home/cimg/cimg/container/run.sh
+
+EOF
+
+podman container create --name=cimg \
+  --net=host --dns=127.0.0.53 --dns-opt='edns0 trust-ad' \
+  --volume cimg-cache:/home/cimg/.cache \
+  cimg
