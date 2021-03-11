@@ -417,7 +417,7 @@ class FancyUI(UI):
             progresses = [self.progress[prefix] for prefix in self.prefixes]
             progresses.insert(0, self.total - sum(progresses))
             progresses.append(self.size - sum(progresses))
-            progressbar = create_progressbar(progresses, ['15', '9', '10', '11', '12', '0'], 80)
+            progressbar = create_progressbar(progresses, ['15', '9', '10', '11', '12', '13', '0'], 80)
             sys.stdout.write('[' + progressbar + '] ' + str((self.total * 100)//self.size)+'%\n')
         else:
             sys.stdout.write('[' + ' ' * 80 + ']\n')
@@ -472,13 +472,7 @@ def create_ui(filename, prefixes):
         # not a terminal
         yield LogfileUI(filename, prefixes)
 
-def get_image(destination):
-    prefixes = [
-        'https://images-frontdoor.apps.ocp.ci.centos.org/',
-        'https://cockpit-11.e2e.bos.redhat.com:8493/',
-        'https://internal-images.cockpit-project.org:8493/',
-    ]
-
+def get_image(destination, prefixes):
     path = os.path.basename(destination)
 
     with create_ui(path, prefixes) as ui:

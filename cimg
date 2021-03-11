@@ -25,6 +25,11 @@ except ImportError:
 def cat_file(obj):
     return subprocess.check_output(['git', '--git-dir', gitdir, 'cat-file', '-p', obj], encoding='utf-8')
 
+
+def get_stores():
+    return [line.split()[1] for line in cat_file('FETCH_HEAD:lib/stores').splitlines()]
+
+
 cimg_commands = {}
 def cimg_command(description):
     def register(func):
@@ -138,7 +143,7 @@ def cmd_download(args, parser):
 
     for image in args.image.values():
         if not image.exists:
-            image_download.get_image(image.filename)
+            image_download.get_image(image.filename, get_stores())
 
 @cimg_command('Update bots repository')
 def cmd_update(args, parser):
