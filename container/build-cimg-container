@@ -2,9 +2,9 @@
 
 podman container rm -f cimg || true
 
-podman build -t cimg -f - <<EOF
+podman build --no-cache -t cimg -f - <<EOF
 
-FROM    debian:testing
+FROM    debian:stable
 
 RUN     apt-get update && \
         DEBIAN_FRONTEND=noninteractive apt-get install -y python3-urllib3 git && \
@@ -14,11 +14,18 @@ RUN     apt-get update && \
 
 USER    cimg
 
-CMD     /home/cimg/cimg/container/run.sh
+CMD     /home/cimg/cimg/cimg server
 
 EOF
+
+podman run --rm --user=root \
+  --volume cimg-cache:/home/cimg/.cache \
+  --volume cimg-config:/home/cimg/.config/cockpit-dev \
+  cimg \
+  chown -R cimg:cimg /home/cimg/.cache /home/cimg/.config/cockpit-dev
 
 podman container create --name=cimg \
   --net=host --dns=127.0.0.53 --dns-opt='edns0 trust-ad' \
   --volume cimg-cache:/home/cimg/.cache \
+  --volume cimg-config:/home/cimg/.config/cockpit-dev \
   cimg
