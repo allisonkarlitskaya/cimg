@@ -8,6 +8,7 @@ import os.path
 import platform
 import subprocess
 import sys
+import time
 
 import image_download
 
@@ -180,6 +181,23 @@ def cmd_server(args, parser):
     listen = ('', 8493)
     server = http.server.HTTPServer(listen, http.server.SimpleHTTPRequestHandler)
     server.serve_forever()
+
+@cimg_command("Attempt to mirror all images")
+def cmd_mirror(args, parser):
+    if parser and not args:
+        return
+
+    while True:
+        subprocess.check_call(['git', '--git-dir', gitdir, 'fetch', '--depth=1', bots_repository])
+        images = ImagesList([])
+        for image in images.values():
+            if not image.exists:
+                image_download.get_image(image.filename, get_stores())
+                # after downloading one image, start over again
+                break
+        else:
+            # no images to download?  wait a bit...
+            time.sleep(30 * 60)
 
 @cimg_command("Display disk usage statistics")
 def cmd_df(args, parser):
