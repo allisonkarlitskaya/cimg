@@ -117,7 +117,7 @@ def worker(prefix, suffix, status_queue, work_queue):
         traceback.print_exc()
         status_queue.put(None) # will crash the main thread
 
-def make_blocks(directory, size, block_size=1024*1024):
+def make_blocks(directory, size, block_size=32*1024*1024):
     template = '{directory}/{index:0{width}} of {parts}'
     parts = (size + block_size - 1) // block_size
     width = len(str(parts))
