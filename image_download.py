@@ -39,15 +39,16 @@ def create_file(filename, size=None, mode=0o444):
 
 class CockpitManager(urllib3.PoolManager):
     def connection_from_context(self, context):
-        # if it has ':' or if it has no letters, then it's an IP → use cockpit-tests as the TLS verification name
-        if ':' in context['host'] or not any(c.isalpha() for c in context['host']):
-            context['server_hostname'] = 'cockpit-tests'
+        # horrible, but effective!
+        if 'linode' not in context['host']:
+            context['ca_certs'] = ca_pem
+
         return super(CockpitManager, self).connection_from_context(context)
 
 def worker(prefix, suffix, status_queue, work_queue):
     try:
         url = prefix + suffix
-        http = CockpitManager(ca_certs=ca_pem, timeout=2.0, retries=1)
+        http = CockpitManager(timeout=2.0, retries=1)
 
         # First, do HEAD to find out if the file is there and discover the size
         request = http.request('HEAD', url)
