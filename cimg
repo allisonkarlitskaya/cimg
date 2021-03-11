@@ -236,7 +236,7 @@ def main():
     args = parser.parse_args()
 
     if ('func' not in args or args.func != cmd_update) and not os.path.exists(gitdir):
-        sys.exit(f"{gitdir} doesn't exist.  Try `cimg update` first.")
+        cmd_update(parser.parse_args(['update']), None)
 
     if 'func' not in args:
         args.func = cmd_status
