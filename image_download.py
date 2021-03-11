@@ -6,9 +6,11 @@ import os
 import queue
 import sys
 import termios
+import s3
 import threading
 import time
 import traceback
+import urllib
 import urllib3
 
 ca_pem=os.path.join(os.path.dirname(__file__), 'ca.pem')
@@ -47,11 +49,18 @@ class CockpitManager(urllib3.PoolManager):
 
 def worker(prefix, suffix, status_queue, work_queue):
     try:
-        url = prefix + suffix
         http = CockpitManager(timeout=2.0, retries=1)
+        url = urllib.parse.urlparse(urllib.parse.urljoin(prefix, suffix))
+
+        if s3.is_key_present(url):
+            head_url = s3.sign_url(url, verb='HEAD')
+            get_url = s3.sign_url(url, verb='GET')
+        else:
+            head_url = url.geturl()
+            get_url = url.geturl()
 
         # First, do HEAD to find out if the file is there and discover the size
-        request = http.request('HEAD', url)
+        request = http.request('HEAD', head_url)
         if request.status != 200:
             status_queue.put((prefix, 'error', str(request.status)))
             return
@@ -73,7 +82,7 @@ def worker(prefix, suffix, status_queue, work_queue):
                 if not os.path.exists(filename):
                     # Request the block
                     headers = {'Range': 'bytes={}-{}'.format(start, end - 1)}
-                    request = http.request('GET', url, headers=headers, preload_content=False)
+                    request = http.request('GET', get_url, headers=headers, preload_content=False)
 
                     if request.status != 206:
                         status_queue.put((prefix, 'error', str(request.status)))
